@@ -14,4 +14,9 @@
     <ProjectReference Include="..\..\src\AstraDb.Driver\AstraDb.Driver.csproj" />
     <ProjectReference Include="..\..\src\AstraDb.Driver.Logging\AstraDb.Driver.Logging.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+  
 </Project>

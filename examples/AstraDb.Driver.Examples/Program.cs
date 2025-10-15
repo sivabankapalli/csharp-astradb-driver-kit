@@ -1,10 +1,15 @@
-using Cassandra;
-using AstraDb.Driver.Abstractions;
+﻿using AstraDb.Driver.Abstractions;
 using AstraDb.Driver.Extensions;
 using AstraDb.Driver.Logging.Extensions;
+using AstraDb.Driver.Logging.Scopes;
+using Cassandra;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Context;
+
+namespace AstraDb.Driver.Examples;
 
 class Program
 {
@@ -16,7 +21,6 @@ class Program
 
         var services = new ServiceCollection();
 
-        // Add AstraDB Serilog integration
         services.AddLogging(logging =>
         {
             logging.ClearProviders();
@@ -30,33 +34,42 @@ class Program
         var logger = sp.GetRequiredService<ILogger<Program>>();
         logger.LogInformation("AstraDB Client initialized.");
 
-        try
+        // Context scope captures keyspace/table/operation
+        using (AstraDbContextScope.Push("dev_ks", "users", "READ"))
         {
-            await client.ReadAsync<object>(
-                "dev_ks", 
-                "users",
-                new Dictionary<string, object> { { "email", "test@test.com" } });
-        }
-        catch (NotImplementedException ex)
-        {
-            logger.LogWarning(ex, "ReadAsync not implemented yet.");
-        }
-        catch (DriverException ex)
-        {
-            logger.LogError(ex, "AstraDB read operation failed.");
+            try
+            {
+                await client.ReadAsync<object>(
+                    "dev_ks",
+                    "users",
+                    new Dictionary<string, object> { { "email", "test@test.com" } });
+            }
+            catch (NotImplementedException ex)
+            {
+                logger.LogWarning(ex, "ReadAsync not implemented yet.");
+            }
+            catch (DriverException ex)
+            {
+                logger.LogError(ex, "AstraDB read operation failed.");
+            }
         }
 
-        try
+        using (AstraDbContextScope.Push("dev_ks", "users", "WRITE"))
         {
-            await client.WriteAsync("dev_ks", "users", new { Email = "x@y.com" });
+            try
+            {
+                await client.WriteAsync("dev_ks", "users", new { Email = "x@y.com" });
+            }
+            catch (NotImplementedException ex)
+            {
+                logger.LogWarning(ex, "WriteAsync not implemented yet.");
+            }
+            catch (DriverException ex)
+            {
+                logger.LogError(ex, "AstraDB write operation failed.");
+            }
         }
-        catch (NotImplementedException ex)
-        {
-            logger.LogWarning(ex, "WriteAsync not implemented yet.");
-        }
-        catch (DriverException ex)
-        {
-            logger.LogError(ex, "AstraDB write operation failed.");
-        }
+
+        logger.LogInformation("Demo complete.");
     }
 }

@@ -1,3 +1,4 @@
+﻿using System;
 using Cassandra;
 using Serilog.Core;
 using Serilog.Events;
@@ -5,46 +6,26 @@ using Serilog.Events;
 namespace AstraDb.Driver.Logging.Enrichers
 {
     /// <summary>
-    /// Enriches Serilog log events with diagnostic information from DataStax Driver exceptions.
+    /// Enriches Serilog events with AstraDB exception metadata.
+    /// Only activates for exceptions from the DataStax Cassandra driver namespace.
     /// </summary>
-    public class AstraDbExceptionEnricher : ILogEventEnricher
+    public sealed class AstraDbExceptionEnricher : ILogEventEnricher
     {
         public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
         {
-            if (logEvent?.Exception is not DriverException driverEx)
+            var exception = logEvent.Exception;
+            if (exception is null)
                 return;
 
-            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty(
-                "AstraDbExceptionType", driverEx.GetType().Name));
-            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty(
-                "AstraDbMessage", driverEx.Message));
+            var exceptionNamespace = exception.GetType().Namespace ?? string.Empty;
+            if (!exceptionNamespace.StartsWith("Cassandra", StringComparison.OrdinalIgnoreCase))
+                return;
 
-            // Host list for NoHostAvailableException
-            if (driverEx is NoHostAvailableException nhex && nhex.Errors?.Any() == true)
-            {
-                var hosts = nhex.Errors.Keys.Select(h => h.Address.ToString());
-                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty(
-                    "AstraDbTriedHosts", string.Join(",", hosts)));
-            }
-
-            // Timeout diagnostics
-            if (driverEx is ReadTimeoutException rtex)
-            {
-                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbConsistency", rtex.ConsistencyLevel.ToString()));
-                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbReceived", rtex.ReceivedAcknowledgements));
-                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbRequired", rtex.RequiredAcknowledgements));
-            }
-
-            if (driverEx is WriteTimeoutException wtex)
-            {
-                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbConsistency", wtex.ConsistencyLevel.ToString()));
-                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbWriteType", wtex.WriteType.ToString()));
-            }
-
-            // Inner exception for transport / protocol details
-            if (driverEx.InnerException != null)
-                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty(
-                    "AstraDbInnerMessage", driverEx.InnerException.Message));
+            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbExceptionType", exception.GetType().Name));
+            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbMessage", exception.Message));
+            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbInnerMessage", exception.InnerException?.Message ?? string.Empty));
+            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbStackTrace", exception.StackTrace ?? string.Empty));
+            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("AstraDbSource", exception.Source ?? "unknown"));
         }
     }
 }

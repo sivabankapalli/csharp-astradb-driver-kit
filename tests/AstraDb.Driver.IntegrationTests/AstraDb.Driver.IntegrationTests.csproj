@@ -9,6 +9,6 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Company.Project.AstraDb.Driver\AstraDb.Driver.csproj" />
+    <ProjectReference Include="..\..\src\AstraDb.Driver\AstraDb.Driver.csproj" />
   </ItemGroup>
 </Project>
