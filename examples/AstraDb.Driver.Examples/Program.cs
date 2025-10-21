@@ -6,8 +6,6 @@ using Cassandra;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Serilog;
-using Serilog.Context;
 
 namespace AstraDb.Driver.Examples;
 
@@ -15,26 +13,35 @@ class Program
 {
     static async Task Main()
     {
+        // Build configuration
         var configuration = new ConfigurationBuilder()
-            .AddJsonFile("appsettings.json", optional: true)
+            .AddJsonFile("appsettings.json", optional: false)
+            .AddEnvironmentVariables()
             .Build();
 
+        // Register services
         var services = new ServiceCollection();
 
+        // Register logging (your AstraDb.Driver.Logging handles enrichers & scopes)
         services.AddLogging(logging =>
         {
             logging.ClearProviders();
             logging.AddAstraDbSerilog(configuration);
         });
 
-        services.AddAstraDbDriver();
-        var sp = services.BuildServiceProvider();
+        // Register AstraDB Driver with configuration section
+        services.AddAstraDbDriver(configuration.GetSection("Astra:Driver"));
+
+        // Build service provider
+        await using var sp = services.BuildServiceProvider();
 
         var client = sp.GetRequiredService<IAstraDbClient>();
         var logger = sp.GetRequiredService<ILogger<Program>>();
-        logger.LogInformation("AstraDB Client initialized.");
+        logger.LogInformation("AstraDB Client initialized successfully.");
 
-        // Context scope captures keyspace/table/operation
+        // -------------------------------
+        //  READ OPERATION
+        // -------------------------------
         using (AstraDbContextScope.Push("dev_ks", "users", "READ"))
         {
             try
@@ -46,7 +53,7 @@ class Program
             }
             catch (NotImplementedException ex)
             {
-                logger.LogWarning(ex, "ReadAsync not implemented yet.");
+                logger.LogWarning(ex, "ReadAsync not implemented yet (expected).");
             }
             catch (DriverException ex)
             {
@@ -54,15 +61,21 @@ class Program
             }
         }
 
+        // -------------------------------
+        //  WRITE OPERATION
+        // -------------------------------
         using (AstraDbContextScope.Push("dev_ks", "users", "WRITE"))
         {
             try
             {
-                await client.WriteAsync("dev_ks", "users", new { Email = "x@y.com" });
+                await client.WriteAsync(
+                    "dev_ks",
+                    "users",
+                    new { Email = "x@y.com" });
             }
             catch (NotImplementedException ex)
             {
-                logger.LogWarning(ex, "WriteAsync not implemented yet.");
+                logger.LogWarning(ex, "WriteAsync not implemented yet (expected).");
             }
             catch (DriverException ex)
             {
@@ -70,6 +83,6 @@ class Program
             }
         }
 
-        logger.LogInformation("Demo complete.");
+        logger.LogInformation("Demo complete. Connection and DI validated successfully.");
     }
 }
