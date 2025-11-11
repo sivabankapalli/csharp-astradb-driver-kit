@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>AstraDb.Driver.Mapping</PackageId>
+    <Version>0.1.0</Version>
+    <!-- bump per release -->
+    <Authors>Your Team</Authors>
+    <Company>Your Org</Company>
+    <Description>Object-to-Cassandra mapping for AstraDB CDK.</Description>
+    <RepositoryUrl>https://github.com/yourorg/yourrepo</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <License>MIT</License>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="CassandraCSharpDriver" Version="3.22.0" />
+  </ItemGroup>
+  
+</Project>
