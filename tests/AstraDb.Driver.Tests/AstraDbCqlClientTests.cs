@@ -8,6 +8,7 @@ using AstraDb.Driver.Extensions;
 using AstraDb.Driver.Implementations;
 using AstraDb.Driver.Internal;
 using Cassandra;
+using Cassandra.Mapping;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -37,6 +38,8 @@ public class AstraDbCqlClientTests
         // Arrange
         var mockCluster = new Mock<ICluster>();
         var mockSession = new Mock<ISession>();
+        var mockMapper = new Mock<IMapper>();
+
         var services = new ServiceCollection();
         services.AddSingleton(
             new AstraDbConnectionOptions
@@ -47,6 +50,7 @@ public class AstraDbCqlClientTests
             });
         services.AddSingleton(mockCluster.Object);
         services.AddSingleton(mockSession.Object);
+        services.AddSingleton(mockMapper.Object);
         services.AddSingleton<IAstraDbClient, AstraDbCqlClient>();
 
         // Act
@@ -65,7 +69,8 @@ public class AstraDbCqlClientTests
         // Arrange
         var mockCluster = new Mock<ICluster>();
         var mockSession = new Mock<ISession>();
-        var client = new AstraDbCqlClient(mockCluster.Object, mockSession.Object);
+        var mockMapper = new Mock<IMapper>();
+        var client = new AstraDbCqlClient(mockCluster.Object, mockSession.Object, mockMapper.Object);
 
         // Act
         Func<Task> act = () => client.ReadAsync<object>("ks", "tbl", new Dictionary<string, object> { { "id", 1 } });
@@ -80,10 +85,11 @@ public class AstraDbCqlClientTests
         // Arrange
         var mockCluster = new Mock<ICluster>().Object;
         var mockSession = new Mock<ISession>().Object;
+        var mockMapper = new Mock<IMapper>().Object;
 
         // Act
-        Action act1 = () => new AstraDbCqlClient(null!, mockSession);
-        Action act2 = () => new AstraDbCqlClient(mockCluster, null!);
+        Action act1 = () => new AstraDbCqlClient(null!, mockSession, mockMapper);
+        Action act2 = () => new AstraDbCqlClient(mockCluster, null!, mockMapper);
 
         // Assert
         Assert.Throws<ArgumentNullException>(act1);
@@ -96,11 +102,12 @@ public class AstraDbCqlClientTests
         // Arrange
         var clusterMock = new Mock<ICluster>();
         var sessionMock = new Mock<ISession>();
+        var mockMapper = new Mock<IMapper>();
 
         clusterMock.Setup(c => c.ShutdownAsync(It.IsAny<int>()))
                    .Returns(Task.CompletedTask);
 
-        var client = new AstraDbCqlClient(clusterMock.Object, sessionMock.Object);
+        var client = new AstraDbCqlClient(clusterMock.Object, sessionMock.Object, mockMapper.Object);
 
         // Act
         await client.DisposeAsync();
@@ -267,6 +274,7 @@ public class AstraDbCqlClientTests
         var sessionMock = new Mock<ISession>();
         var preparedMock = new Mock<PreparedStatement>();
         var boundMock = new Mock<BoundStatement>();
+        var mockMapper = new Mock<IMapper>();
 
         sessionMock.Setup(s => s.Keyspace).Returns(keyspace);
         sessionMock.Setup(s => s.PrepareAsync(It.IsAny<string>())).ReturnsAsync(preparedMock.Object);
@@ -283,7 +291,7 @@ public class AstraDbCqlClientTests
                        .ReturnsAsync(executeResult);
         }
 
-        var client = new AstraDbCqlClient(clusterMock.Object, sessionMock.Object);
+        var client = new AstraDbCqlClient(clusterMock.Object, sessionMock.Object, mockMapper.Object);
         return (clusterMock, sessionMock, preparedMock, boundMock, client);
     }
 

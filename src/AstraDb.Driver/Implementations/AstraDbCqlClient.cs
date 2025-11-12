@@ -1,6 +1,9 @@
 ﻿using AstraDb.Driver.Abstractions;
+using AstraDb.Driver.Helpers;
 using AstraDb.Driver.Internal;
+using AstraDb.Driver.Models;
 using Cassandra;
+using Cassandra.Mapping;
 using Serilog;
 
 namespace AstraDb.Driver.Implementations;
@@ -22,6 +25,11 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
     private readonly ICluster _cluster;
 
     /// <summary>
+    /// Cassandra Mapper for POCO mapping (optional, may be null).
+    /// </summary>
+    private readonly IMapper _mapper;
+
+    /// <summary>
     /// Shared cache for prepared statements to optimize query execution.
     /// </summary>
     private static readonly PreparedStatementCache _prepCache = new PreparedStatementCache();
@@ -32,10 +40,11 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
     /// <param name="cluster">The Cassandra cluster instance.</param>
     /// <param name="session">The Cassandra session instance.</param>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="cluster"/> or <paramref name="session"/> is null.</exception>
-    public AstraDbCqlClient(ICluster cluster, ISession session)
+    public AstraDbCqlClient(ICluster cluster, ISession session, IMapper mapper)
     {
         _cluster = cluster ?? throw new ArgumentNullException(nameof(cluster));
         _session = session ?? throw new ArgumentNullException(nameof(session));
+        _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
     }
 
     /// <summary>
@@ -172,4 +181,53 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
         (_session as IDisposable)?.Dispose();
         await _cluster.ShutdownAsync().ConfigureAwait(false);
     }
+
+    public async Task<IEnumerable<T>> ReadAsync<T>(IDictionary<string, object> filters = null, CancellationToken ct = default)
+    {
+        try
+        {
+            if (filters is null || filters.Count == 0)
+                return await _mapper.FetchAsync<T>();
+
+            var (whereCql, keys) = WhereBuilder.BuildWhereFromDict(filters);
+            var args = keys.Select(k => filters[k]).ToArray();
+            var cql = new Cql(whereCql, args);
+            cql.WithOptions(options =>
+            {
+                options.SetConsistencyLevel(ConsistencyLevel.LocalQuorum);
+            });
+
+            return await _mapper.FetchAsync<T>(cql);
+        }
+        catch (DriverException ex)
+        {
+            Log.Warning(ex, "Cassandra read failed for {Type}", typeof(T).Name);
+            return Array.Empty<T>();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Unexpected error during ReadAsync<{Type}>", typeof(T).Name);
+            return Array.Empty<T>();
+        }
+    }
+
+    public async Task<WriteResult> WriteAsync<T>(T document, CancellationToken ct = default)
+    {
+        try
+        {
+            await _mapper.InsertAsync(document);
+            return new WriteResult(true);
+        }
+        catch (DriverException ex)
+        {
+            Log.Warning(ex, "Insert failed for {Type}", typeof(T).Name);
+            return new WriteResult(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Unexpected error during WriteAsync<{Type}>", typeof(T).Name);
+            return new WriteResult(false);
+        }
+    }
+
 }

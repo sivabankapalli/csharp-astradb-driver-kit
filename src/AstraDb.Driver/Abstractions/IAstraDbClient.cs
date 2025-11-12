@@ -1,8 +1,6 @@
-using Cassandra;
+using AstraDb.Driver.Models;
 
 namespace AstraDb.Driver.Abstractions;
-
-public sealed record WriteResult(bool Success);
 
 public interface IAstraDbClient : IAsyncDisposable
 {
@@ -10,6 +8,14 @@ public interface IAstraDbClient : IAsyncDisposable
         string keyspace,
         string table,
         IDictionary<string, object> filters);
+
+    Task<IEnumerable<T>> ReadAsync<T>(
+        IDictionary<string, object> filters = null!, 
+        CancellationToken ct = default);
+
+    Task<WriteResult> WriteAsync<T>(
+        T document,
+        CancellationToken ct = default);
 
     Task<WriteResult> WriteAsync(
         string keyspace,

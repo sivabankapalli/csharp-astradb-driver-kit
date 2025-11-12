@@ -22,6 +22,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{B435B955
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AstraDb.Driver.CustomMapping", "src\AstraDb.Driver.CustomMapping\AstraDb.Driver.CustomMapping.csproj", "{D6DF1508-F9A1-430C-AE07-481737643582}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AstraDb.Driver.Mapping", "src\AstraDb.Driver.Mapping\AstraDb.Driver.Mapping.csproj", "{CF610790-2F61-47A3-934F-B16ADEB0052B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AstraDb.Driver.Mapping.Examples", "examples\AstraDb.Driver.Mapping.Examples\AstraDb.Driver.Mapping.Examples.csproj", "{02F1B928-CB3C-4ADA-96A3-AA21FAA95932}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -56,6 +60,14 @@ Global
 		{D6DF1508-F9A1-430C-AE07-481737643582}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D6DF1508-F9A1-430C-AE07-481737643582}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D6DF1508-F9A1-430C-AE07-481737643582}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CF610790-2F61-47A3-934F-B16ADEB0052B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF610790-2F61-47A3-934F-B16ADEB0052B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF610790-2F61-47A3-934F-B16ADEB0052B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF610790-2F61-47A3-934F-B16ADEB0052B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{02F1B928-CB3C-4ADA-96A3-AA21FAA95932}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{02F1B928-CB3C-4ADA-96A3-AA21FAA95932}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{02F1B928-CB3C-4ADA-96A3-AA21FAA95932}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{02F1B928-CB3C-4ADA-96A3-AA21FAA95932}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -68,6 +80,8 @@ Global
 		{55555555-5555-5555-5555-555555555555} = {B435B955-ABFB-4247-90C4-CA37A1EBAB9D}
 		{66666666-6666-6666-6666-666666666666} = {238DF429-6730-4D1C-BCA5-F7AD14940763}
 		{D6DF1508-F9A1-430C-AE07-481737643582} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{CF610790-2F61-47A3-934F-B16ADEB0052B} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{02F1B928-CB3C-4ADA-96A3-AA21FAA95932} = {238DF429-6730-4D1C-BCA5-F7AD14940763}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {E8F3CF0A-37C2-4924-9C40-50D12528FDAC}

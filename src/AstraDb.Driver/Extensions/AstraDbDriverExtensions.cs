@@ -1,9 +1,12 @@
 using AstraDb.Driver.Abstractions;
 using AstraDb.Driver.Config;
 using AstraDb.Driver.Implementations;
+using AstraDb.Driver.Mapping;
 using Cassandra;
+using Cassandra.Mapping;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AstraDb.Driver.Extensions;
 
@@ -13,8 +16,9 @@ namespace AstraDb.Driver.Extensions;
 public static class AstraDbDriverExtensions
 {
     public static IServiceCollection AddAstraDbDriver(
-        this IServiceCollection services,
-        IConfigurationSection configSection)
+            this IServiceCollection services,
+            IConfigurationSection configSection,
+            Action<AstraMappingRegistry>? configureMappings = null)
     {
         if (configSection == null)
             throw new ArgumentNullException(nameof(configSection), "Configuration section cannot be null.");
@@ -24,28 +28,49 @@ public static class AstraDbDriverExtensions
 
         ValidateOptions(options);
 
-        // Register options as singleton
+        // Options
         services.AddSingleton(options);
 
-        // Register Cluster (singleton)
+        // Cluster (singleton)
         services.AddSingleton<ICluster>(_ =>
             Cluster.Builder()
                 .WithCloudSecureConnectionBundle(options.SecureConnectBundlePath)
                 .WithCredentials("token", options.Token)
                 .Build());
 
-        // Register Session (singleton, per cluster)
+        // Session (singleton)
         services.AddSingleton<ISession>(sp =>
         {
             var cluster = sp.GetRequiredService<ICluster>();
             return cluster.Connect(options.Keyspace);
         });
 
-        // Register AstraDB client
+        // Optional Mapper
+        if (configureMappings is not null)
+        {
+            services.AddSingleton<MappingConfiguration>(sp =>
+            {
+                var reg = new AstraMappingRegistry();
+                configureMappings(reg);
+                return reg.Build();
+            });
+
+            services.AddSingleton<IMapper>(sp =>
+                new Mapper(sp.GetRequiredService<ISession>(), sp.GetRequiredService<MappingConfiguration>()));
+        }
+        else
+        {
+            // If not configured, try to use MappingConfiguration.Global only if someone asks for IMapper
+            services.TryAddSingleton<IMapper>(sp =>
+                new Mapper(sp.GetRequiredService<ISession>(), MappingConfiguration.Global));
+        }
+
+        // Client
         services.AddSingleton<IAstraDbClient, AstraDbCqlClient>();
 
         return services;
     }
+
 
     private static void ValidateOptions(AstraDbConnectionOptions options)
     {
