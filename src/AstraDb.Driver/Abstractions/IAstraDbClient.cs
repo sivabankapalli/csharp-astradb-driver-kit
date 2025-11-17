@@ -10,7 +10,7 @@ public interface IAstraDbClient : IAsyncDisposable
         IDictionary<string, object> filters);
 
     Task<IEnumerable<T>> ReadAsync<T>(
-        IDictionary<string, object> filters = null!, 
+        IDictionary<string, object> filters = null!,
         CancellationToken ct = default);
 
     Task<WriteResult> WriteAsync<T>(

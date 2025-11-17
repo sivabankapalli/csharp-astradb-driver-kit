@@ -2,7 +2,7 @@ using AstraDb.Driver.Mapping.Examples.Models;
 
 namespace AstraDb.Driver.Mapping.Examples.Mappings;
 
-public sealed class DomainMappings : Mappings
+public sealed class DomainMappings : Cassandra.Mapping.Mappings
 {
     public DomainMappings()
     {

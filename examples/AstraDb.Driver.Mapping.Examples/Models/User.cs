@@ -2,7 +2,7 @@ using Cassandra.Mapping.Attributes;
 
 namespace AstraDb.Driver.Mapping.Examples.Models;
 
-[Table(Name = "users", KeyspaceName = "dev_ks")]
+[Table(Name = "users", Keyspace = "dev_ks")]
 public class User
 {
     [PartitionKey] public Guid UserId { get; set; }

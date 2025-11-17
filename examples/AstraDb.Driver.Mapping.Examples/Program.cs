@@ -1,55 +1,95 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using AstraDb.Driver.Abstractions;
+using AstraDb.Driver.Extensions;
+using AstraDb.Driver.Mapping.Examples;
+using AstraDb.Driver.Mapping.Examples.Mappings;
+using AstraDb.Driver.Mapping.Examples.Models;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using AstraDb.Driver.Logging.Extensions;
 using Microsoft.Extensions.Logging;
 
-var builder = Host.CreateDefaultBuilder(args)
-    .ConfigureAppConfiguration((ctx, cfg) =>
+// using AstraDb.Driver;                     // where IAstraDbClient lives
+// using AstraDb.Driver.Logging;             // for AddAstraDbSerilog if you use it
+// using AstraDb.Driver.DependencyInjection; // where AddAstraDbDriver extension lives
+// using YourNamespace.For.Mapping;          // DomainMappings, User
+// using YourNamespace.For.Samples;          // SampleRunner
+
+public class Program
+{
+    public static async Task Main(string[] args)
     {
-        cfg.SetBasePath(Directory.GetCurrentDirectory());
-        cfg.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
-        cfg.AddEnvironmentVariables();
-    })
-    .UseSerilog((ctx, conf) => conf.ReadFrom.Configuration(ctx.Configuration))
-    .ConfigureServices((ctx, services) =>
-    {
-        var mode = ctx.Configuration["Mode"] ?? "Mapped";
+        // -------------------------------
+        //  CONFIGURATION
+        // -------------------------------
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+            .AddEnvironmentVariables()
+            .Build();
+
+        // -------------------------------
+        //  SERVICE REGISTRATION
+        // -------------------------------
+        var services = new ServiceCollection();
+
+        // Logging – either use your AstraDb-specific Serilog helper or plain console
+        services.AddLogging(logging =>
+        {
+            logging.ClearProviders();
+            logging.AddAstraDbSerilog(configuration);
+        });
+
+        // Determine mode (Raw vs Mapped)
+        var mode = configuration["Mode"] ?? "Mapped";
 
         if (string.Equals(mode, "Raw", StringComparison.OrdinalIgnoreCase))
         {
             // RAW-ONLY: no mapper registration
-            services.AddAstraDbDriver(ctx.Configuration.GetSection("AstraDb"));
+            services.AddAstraDbDriver(configuration.GetSection("AstraDb"));
         }
         else
         {
             // MAPPED: driver + mappings in one call
-            services.AddAstraDbDriver(ctx.Configuration.GetSection("AstraDb"), reg =>
+            services.AddAstraDbDriver(configuration.GetSection("AstraDb"), reg =>
             {
+                // Domain mappings assembly
                 reg.AddMappingsFromAssembly(typeof(DomainMappings).Assembly);
+
+                // Optional convention maps
                 reg.AddConventionMaps(new[] { typeof(User) }, keyspace: "dev_ks");
             });
         }
 
-        services.AddLogging();
+        // Register SampleRunner
         services.AddScoped<SampleRunner>(sp =>
             new SampleRunner(
                 sp.GetRequiredService<IAstraDbClient>(),
                 sp.GetRequiredService<ILogger<SampleRunner>>(),
                 mode));
-    });
 
-var app = builder.Build();
+        // -------------------------------
+        //  BUILD PROVIDER & RUN
+        // -------------------------------
+        await using var serviceProvider = services.BuildServiceProvider();
 
-using (var scope = app.Services.CreateScope())
-{
-    var runner = scope.ServiceProvider.GetRequiredService<SampleRunner>();
-    try
-    {
-        await runner.RunAsync();
-    }
-    catch (Exception ex)
-    {
-        var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        log.LogError(ex, "Sample failed");
+        // Root logger (for Program-level errors)
+        var rootLogger = serviceProvider.GetRequiredService<ILogger<Program>>();
+
+        using (var scope = serviceProvider.CreateScope())
+        {
+            var runner = scope.ServiceProvider.GetRequiredService<SampleRunner>();
+
+            try
+            {
+                await runner.RunAsync();
+            }
+            catch (Exception ex)
+            {
+                var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+                log.LogError(ex, "Sample failed");
+            }
+        }
+
+        rootLogger.LogInformation("Sample completed. Shutting down.");
     }
 }
-
-await app.StopAsync();
