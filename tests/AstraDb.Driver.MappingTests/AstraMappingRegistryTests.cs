@@ -105,7 +105,7 @@ public class AstraMappingRegistryTests
             return propName.ToLowerInvariant();
         }
 
-        // Two entities: one with [Table], one without
+        // One attributed type, one convention-based type
         var types = new[] { typeof(AttributedEntity), typeof(ConventionEntity) };
 
         // Act
@@ -116,17 +116,17 @@ public class AstraMappingRegistryTests
                     tableName: TableNameFunc)
                 .Build();
 
-        // Assert
-        // The attributed type should be skipped
-        Assert.DoesNotContain(nameof(AttributedEntity), tableNameCalls);
-        Assert.DoesNotContain(nameof(AttributedEntity.Id), columnNameCalls);
-        Assert.DoesNotContain(nameof(AttributedEntity.Name), columnNameCalls);
+        // Assert: table-name function should only be called for ConventionEntity
+        Assert.Single(tableNameCalls);
+        Assert.Equal(nameof(ConventionEntity), tableNameCalls[0]);
 
-        // The non-attributed type should be included
-        Assert.Contains(nameof(ConventionEntity), tableNameCalls);
+        // Both types have Id + Name, but only the non-attributed type should be processed.
+        // So we expect exactly 2 column-name calls.
+        Assert.Equal(2, columnNameCalls.Count);
         Assert.Contains(nameof(ConventionEntity.Id), columnNameCalls);
         Assert.Contains(nameof(ConventionEntity.Name), columnNameCalls);
     }
+
 
     [Theory]
     [InlineData("UserName", "user_name")]

@@ -265,6 +265,378 @@ public class AstraDbCqlClientTests
         sessionMock.Verify(s => s.PrepareAsync("CQL"), Times.Once);
     }
 
+    [Fact]
+    public void Constructor_Should_Throw_On_Null_Mapper() // NEW TEST
+    {
+        // Arrange
+        var mockCluster = new Mock<ICluster>().Object;
+        var mockSession = new Mock<ISession>().Object;
+
+        // Act
+        Action act = () => new AstraDbCqlClient(mockCluster, mockSession, null!);
+
+        // Assert
+        Assert.Throws<ArgumentNullException>(act);
+    }
+
+    [Fact]
+    public async Task WriteAsync_Should_Throw_When_Keyspace_Invalid() // NEW TEST
+    {
+        // Arrange
+        var client = new AstraDbCqlClient(
+            new Mock<ICluster>().Object,
+            new Mock<ISession>().Object,
+            new Mock<IMapper>().Object);
+
+        var fields = new Dictionary<string, object?> { { "id", 1 } };
+
+        // Act
+        Func<Task> act = () => client.WriteAsync("", "tbl", fields);
+
+        // Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(act);
+        Assert.Contains("keyspace required", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WriteAsync_Should_Throw_When_Table_Invalid() // NEW TEST
+    {
+        // Arrange
+        var client = new AstraDbCqlClient(
+            new Mock<ICluster>().Object,
+            new Mock<ISession>().Object,
+            new Mock<IMapper>().Object);
+
+        var fields = new Dictionary<string, object?> { { "id", 1 } };
+
+        // Act
+        Func<Task> act = () => client.WriteAsync("ks", " ", fields);
+
+        // Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(act);
+        Assert.Contains("table required", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WriteAsync_Should_Throw_When_Fields_Null() // NEW TEST
+    {
+        // Arrange
+        var client = new AstraDbCqlClient(
+            new Mock<ICluster>().Object,
+            new Mock<ISession>().Object,
+            new Mock<IMapper>().Object);
+
+        // Act
+        Func<Task> act = () => client.WriteAsync("ks", "tbl", null!);
+
+        // Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(act);
+        Assert.Contains("At least one column/value is required", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WriteAsync_Should_Throw_When_Fields_Empty() // NEW TEST
+    {
+        // Arrange
+        var client = new AstraDbCqlClient(
+            new Mock<ICluster>().Object,
+            new Mock<ISession>().Object,
+            new Mock<IMapper>().Object);
+
+        var fields = new Dictionary<string, object?>();
+
+        // Act
+        Func<Task> act = () => client.WriteAsync("ks", "tbl", fields);
+
+        // Assert
+        var ex = await Assert.ThrowsAsync<ArgumentException>(act);
+        Assert.Contains("At least one column/value is required", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithPoco_Should_Throw_When_Document_Null() // NEW TEST
+    {
+        // Arrange
+        var client = new AstraDbCqlClient(
+            new Mock<ICluster>().Object,
+            new Mock<ISession>().Object,
+            new Mock<IMapper>().Object);
+
+        // Act
+        Func<Task> act = () => client.WriteAsync<object>("ks", "tbl", null!, _ => new Dictionary<string, object?>());
+
+        // Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(act);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithPoco_Should_Throw_When_Mapper_Null() // NEW TEST
+    {
+        // Arrange
+        var client = new AstraDbCqlClient(
+            new Mock<ICluster>().Object,
+            new Mock<ISession>().Object,
+            new Mock<IMapper>().Object);
+
+        var poco = new { Id = 1 };
+
+        // Act
+        Func<Task> act = () => client.WriteAsync("ks", "tbl", poco, null!);
+
+        // Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(act);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithPoco_Should_Throw_When_Mapper_Returns_Null() // NEW TEST
+    {
+        // Arrange
+        var client = new AstraDbCqlClient(
+            new Mock<ICluster>().Object,
+            new Mock<ISession>().Object,
+            new Mock<IMapper>().Object);
+
+        var poco = new { Id = 1 };
+
+        // Act
+        Func<Task> act = () => client.WriteAsync("ks", "tbl", poco, _ => null!);
+
+        // Assert
+        await Assert.ThrowsAsync<ArgumentException>(act);
+    }
+
+    // ---------- Generic ReadAsync<T>(filters) using _mapper ----------
+
+    public class SampleEntity
+    {
+        public int Id { get; set; }
+    }
+
+    [Fact]
+    public async Task ReadAsync_Generic_Should_Return_All_When_No_Filters()
+    {
+        // Arrange
+        var cluster = new Mock<ICluster>();
+        var session = new Mock<ISession>();
+        var mapper = new Mock<IMapper>();
+
+        var expected = new List<SampleEntity>
+    {
+        new SampleEntity { Id = 1 },
+        new SampleEntity { Id = 2 }
+    };
+
+        // Match the overload used by your code: FetchAsync<T>(CqlQueryOptions options = null)
+        mapper.Setup(m => m.FetchAsync<SampleEntity>(It.IsAny<CqlQueryOptions>()))
+              .ReturnsAsync(expected);
+
+        var client = new AstraDbCqlClient(cluster.Object, session.Object, mapper.Object);
+
+        // Act
+        var result = await client.ReadAsync<SampleEntity>();
+
+        // Assert
+        Assert.Same(expected, result);
+        mapper.Verify(m => m.FetchAsync<SampleEntity>(It.IsAny<CqlQueryOptions>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReadAsync_Generic_Should_Use_Filters_When_Provided() // NEW TEST
+    {
+        // Arrange
+        var cluster = new Mock<ICluster>();
+        var session = new Mock<ISession>();
+        var mapper = new Mock<IMapper>();
+
+        var expected = new List<SampleEntity>
+        {
+            new SampleEntity { Id = 10 }
+        };
+
+        mapper.Setup(m => m.FetchAsync<SampleEntity>(It.IsAny<Cql>()))
+              .ReturnsAsync(expected);
+
+        var client = new AstraDbCqlClient(cluster.Object, session.Object, mapper.Object);
+        var filters = new Dictionary<string, object> { ["id"] = 10 };
+
+        // Act
+        var result = await client.ReadAsync<SampleEntity>(filters);
+
+        // Assert
+        Assert.Same(expected, result);
+        mapper.Verify(m => m.FetchAsync<SampleEntity>(It.IsAny<Cql>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReadAsync_Generic_Should_Return_Empty_On_DriverException() // NEW TEST
+    {
+        // Arrange
+        var cluster = new Mock<ICluster>();
+        var session = new Mock<ISession>();
+        var mapper = new Mock<IMapper>();
+
+        mapper.Setup(m => m.FetchAsync<SampleEntity>(It.IsAny<Cql>()))
+              .ThrowsAsync(new OperationTimedOutException(null, 0));
+
+        var client = new AstraDbCqlClient(cluster.Object, session.Object, mapper.Object);
+
+        // Act
+        var result = await client.ReadAsync<SampleEntity>();
+
+        // Assert
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task ReadAsync_Generic_Should_Return_Empty_On_UnexpectedException() // NEW TEST
+    {
+        // Arrange
+        var cluster = new Mock<ICluster>();
+        var session = new Mock<ISession>();
+        var mapper = new Mock<IMapper>();
+
+        mapper.Setup(m => m.FetchAsync<SampleEntity>(It.IsAny<Cql>()))
+              .ThrowsAsync(new InvalidOperationException("boom"));
+
+        var client = new AstraDbCqlClient(cluster.Object, session.Object, mapper.Object);
+
+        // Act
+        var result = await client.ReadAsync<SampleEntity>();
+
+        // Assert
+        Assert.Empty(result);
+    }
+
+    // ---------- WriteAsync<T>(document) using _mapper ----------
+
+    [Fact]
+    public async Task WriteAsync_Generic_Should_Return_Success_On_Insert() // NEW TEST
+    {
+        // Arrange
+        var cluster = new Mock<ICluster>();
+        var session = new Mock<ISession>();
+        var mapper = new Mock<IMapper>();
+
+        mapper.Setup(m => m.InsertAsync(
+                          It.IsAny<SampleEntity>(),
+                          It.IsAny<CqlQueryOptions>()))
+              .Returns(Task.CompletedTask);
+
+        var client = new AstraDbCqlClient(cluster.Object, session.Object, mapper.Object);
+        var entity = new SampleEntity { Id = 123 };
+
+        // Act
+        var result = await client.WriteAsync(entity);
+
+        // Assert
+        Assert.True(result.Success);
+        mapper.Verify(m => m.InsertAsync(
+                  It.Is<SampleEntity>(e => e == entity),
+                  It.IsAny<CqlQueryOptions>()),
+              Times.Once);
+    }
+
+    [Fact]
+    public async Task WriteAsync_Generic_Should_Return_False_On_DriverException() // NEW TEST
+    {
+        // Arrange
+        var cluster = new Mock<ICluster>();
+        var session = new Mock<ISession>();
+        var mapper = new Mock<IMapper>();
+
+        mapper.Setup(m => m.InsertAsync(
+                          It.IsAny<SampleEntity>(),
+                          It.IsAny<CqlQueryOptions>()))
+              .ThrowsAsync(new InvalidOperationException("boom"));
+
+
+        var client = new AstraDbCqlClient(cluster.Object, session.Object, mapper.Object);
+        var entity = new SampleEntity { Id = 123 };
+
+        // Act
+        var result = await client.WriteAsync(entity);
+
+        // Assert
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public async Task WriteAsync_Generic_Should_Return_False_On_UnexpectedException() // NEW TEST
+    {
+        // Arrange
+        var cluster = new Mock<ICluster>();
+        var session = new Mock<ISession>();
+        var mapper = new Mock<IMapper>();
+
+        mapper.Setup(m => m.InsertAsync(
+                          It.IsAny<SampleEntity>(),
+                          It.IsAny<CqlQueryOptions>()))
+              .ThrowsAsync(new InvalidOperationException("boom"));
+
+
+        var client = new AstraDbCqlClient(cluster.Object, session.Object, mapper.Object);
+        var entity = new SampleEntity { Id = 123 };
+
+        // Act
+        var result = await client.WriteAsync(entity);
+
+        // Assert
+        Assert.False(result.Success);
+    }
+
+    // ---------- DisposeAsync branch: session IDisposable ----------
+
+    [Fact]
+    public async Task DisposeAsync_Should_Dispose_Session_If_Disposable() // NEW TEST
+    {
+        // Arrange
+        var clusterMock = new Mock<ICluster>();
+        clusterMock.Setup(c => c.ShutdownAsync(It.IsAny<int>()))
+                   .Returns(Task.CompletedTask);
+
+        var sessionMock = new Mock<ISession>();
+        var sessionDisposable = sessionMock.As<IDisposable>();
+        sessionDisposable.Setup(d => d.Dispose());
+
+        var mapper = new Mock<IMapper>();
+
+        var client = new AstraDbCqlClient(clusterMock.Object, sessionMock.Object, mapper.Object);
+
+        // Act
+        await client.DisposeAsync();
+
+        // Assert
+        sessionDisposable.Verify(d => d.Dispose(), Times.Once);
+        clusterMock.Verify(c => c.ShutdownAsync(It.IsAny<int>()), Times.Once);
+    }
+
+    // ---------- PreparedStatementCache extra branch ----------
+
+    [Fact]
+    public async Task PreparedStatementCache_Should_Prepare_Separate_Keys_Independently() // NEW TEST
+    {
+        // Arrange
+        var sessionMock = new Mock<ISession>();
+        var prepared1 = new Mock<PreparedStatement>().Object;
+        var prepared2 = new Mock<PreparedStatement>().Object;
+
+        sessionMock.SetupSequence(s => s.PrepareAsync(It.IsAny<string>()))
+                   .ReturnsAsync(prepared1)
+                   .ReturnsAsync(prepared2);
+
+        var cache = new PreparedStatementCache();
+
+        // Act
+        var ps1 = await cache.GetOrPrepareAsync(sessionMock.Object, "CQL1", "key1");
+        var ps2 = await cache.GetOrPrepareAsync(sessionMock.Object, "CQL2", "key2");
+
+        // Assert
+        Assert.Same(prepared1, ps1);
+        Assert.Same(prepared2, ps2);
+        sessionMock.Verify(s => s.PrepareAsync("CQL1"), Times.Once);
+        sessionMock.Verify(s => s.PrepareAsync("CQL2"), Times.Once);
+    }
+
     // --- Helpers to reduce duplication ------------------------------------------------
 
     private static (Mock<ICluster> clusterMock, Mock<ISession> sessionMock, Mock<PreparedStatement> preparedMock, Mock<BoundStatement> boundMock, AstraDbCqlClient client)
