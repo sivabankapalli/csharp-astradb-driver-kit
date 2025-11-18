@@ -56,7 +56,7 @@ public class Program
                 reg.AddMappingsFromAssembly(typeof(DomainMappings).Assembly);
 
                 // Optional convention maps
-                reg.AddConventionMaps(new[] { typeof(User) }, keyspace: "dev_ks");
+                reg.AddConventionMaps(new[] { typeof(User) }, keyspace: "dev_cdk_ks");
             });
         }
 

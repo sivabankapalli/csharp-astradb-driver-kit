@@ -20,4 +20,9 @@
     <ProjectReference Include="..\..\src\AstraDb.Driver.Logging\AstraDb.Driver.Logging.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="appsettings.json" CopyToOutputDirectory="Always" />
+    <None Update="secure-connect-dev-cdk-db.zip" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+  
 </Project>

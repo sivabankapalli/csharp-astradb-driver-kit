@@ -1,5 +1,7 @@
-﻿using System.Reflection;
+﻿using System.Linq.Expressions;
+using System.Reflection;
 using Cassandra.Mapping;
+using Cassandra.Mapping.Attributes;
 
 namespace AstraDb.Driver.Mapping;
 
@@ -13,23 +15,37 @@ public sealed class AstraMappingRegistry
         return this;
     }
 
-    public AstraMappingRegistry AddMappingsFromAssembly(Assembly asm)
+    /// <summary>
+    /// Registers fluent mappings discovered in a given assembly.
+    /// Supports types that implement Mappings.
+    /// </summary>
+    public AstraMappingRegistry AddMappingsFromAssembly(Assembly assembly)
     {
-        var types = asm.GetTypes()
-            .Where(t => !t.IsAbstract && typeof(Mappings).IsAssignableFrom(t));
-        foreach (var t in types)
+        _steps.Add(cfg =>
         {
-            _steps.Add(cfg =>
+            foreach (var type in assembly.GetTypes())
             {
-                var instance = (Mappings)Activator.CreateInstance(t)!;
-                cfg.Define(instance);
-                return cfg;
-            });
-        }
+                if (typeof(Mappings).IsAssignableFrom(type) && !type.IsAbstract)
+                {
+                    var mappingsInstance = (Mappings)Activator.CreateInstance(type)!;
+                    cfg.Define(mappingsInstance);
+                }
+            }
+            return cfg;
+        });
+
         return this;
     }
 
-    public AstraMappingRegistry AddConventionMaps(IEnumerable<Type> entityTypes, string? keyspace = null, Func<string, string>? columnName = null, Func<string, string>? tableName = null)
+    /// <summary>
+    /// Automatically applies convention-based mapping for types WITHOUT [Table] attributes.
+    /// For types with [Table], attributes take precedence and conventions are skipped.
+    /// </summary>
+    public AstraMappingRegistry AddConventionMaps(
+        IEnumerable<Type> entityTypes,
+        string? keyspace = null,
+        Func<string, string>? columnName = null,
+        Func<string, string>? tableName = null)
     {
         columnName ??= DefaultSnakeCase;
         tableName ??= DefaultSnakeCase;
@@ -38,24 +54,74 @@ public sealed class AstraMappingRegistry
         {
             foreach (var t in entityTypes)
             {
-                var mapType = typeof(Map<>).MakeGenericType(t);
-                dynamic map = Activator.CreateInstance(mapType)!;
-                if (!string.IsNullOrWhiteSpace(keyspace))
-                    map = map.KeyspaceName(keyspace);
-                map = map.TableName(tableName(t.Name));
-
-                foreach (var p in t.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                // Skip types already using [Table] attribute
+                var tableAttr = t.GetCustomAttribute<TableAttribute>();
+                if (tableAttr != null)
                 {
-                    if (!p.CanRead || !p.CanWrite) continue;
-                    var col = columnName(p.Name);
-                    map = map.Column(p, (Func<ColumnMap, ColumnMap>)(cm => cm.WithName(col)));
+                    continue;
                 }
-                cfg.Define(map);
+
+                // Create Map<T>
+                var mapType = typeof(Map<>).MakeGenericType(t);
+                var map = Activator.CreateInstance(mapType)
+                          ?? throw new InvalidOperationException($"Failed to create Map<{t.Name}>");
+
+                // ----- Apply keyspace -----
+                if (!string.IsNullOrWhiteSpace(keyspace))
+                {
+                    mapType.GetMethod("KeyspaceName")!
+                           .Invoke(map, new object[] { keyspace });
+                }
+
+                // ----- Apply table -----
+                mapType.GetMethod("TableName")!
+                       .Invoke(map, [tableName(t.Name)]);
+
+                // Get Column<TProp>() method definition
+                var columnMethod = mapType
+                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Single(m =>
+                        m.Name == "Column" &&
+                        m.IsGenericMethodDefinition &&
+                        m.GetParameters().Length == 2);
+
+                // Build property mappings
+                foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (!p.CanRead || !p.CanWrite)
+                        continue;
+
+                    var colName = columnName(p.Name);
+
+                    // Build expression: x => (object)x.Property
+                    var param = Expression.Parameter(t, "x");
+                    var body = Expression.Property(param, p);
+                    var cast = Expression.Convert(body, typeof(object));
+
+                    var funcType = typeof(Func<,>).MakeGenericType(t, typeof(object));
+                    var expr = Expression.Lambda(funcType, cast, param);
+
+                    // Make Column<object>(expr, action)
+                    var genericColumn = columnMethod.MakeGenericMethod(typeof(object));
+
+                    genericColumn.Invoke(
+                        map,
+                        [
+                                expr,
+                                (Action<ColumnMap>)(cm => cm.WithName(colName))
+                        ]);
+                }
+
+                // Register mapping
+                cfg.Define((dynamic)map);
             }
+
             return cfg;
         });
+
         return this;
     }
+
 
     public AstraMappingRegistry AddOverridesFrom(IEnumerable<TypeOverride> overrides)
     {
