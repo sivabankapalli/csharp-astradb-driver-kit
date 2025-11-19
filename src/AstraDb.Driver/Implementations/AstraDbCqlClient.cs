@@ -2,8 +2,10 @@
 using AstraDb.Driver.Helpers;
 using AstraDb.Driver.Internal;
 using AstraDb.Driver.Models;
+using AstraDb.Driver.Options;
 using Cassandra;
 using Cassandra.Mapping;
+using Microsoft.Extensions.Options;
 using Serilog;
 
 namespace AstraDb.Driver.Implementations;
@@ -30,6 +32,11 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
     private readonly IMapper _mapper;
 
     /// <summary>
+    /// AstraDB request defaults from configuration.
+    /// </summary>
+    private readonly AstraDbRequestDefaults _defaults;
+
+    /// <summary>
     /// Shared cache for prepared statements to optimize query execution.
     /// </summary>
     private static readonly PreparedStatementCache _prepCache = new PreparedStatementCache();
@@ -40,11 +47,16 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
     /// <param name="cluster">The Cassandra cluster instance.</param>
     /// <param name="session">The Cassandra session instance.</param>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="cluster"/> or <paramref name="session"/> is null.</exception>
-    public AstraDbCqlClient(ICluster cluster, ISession session, IMapper mapper)
+    public AstraDbCqlClient(
+        ICluster cluster, 
+        ISession session,
+        IMapper mapper,
+        IOptions<AstraDbRequestDefaults> defaults)
     {
         _cluster = cluster ?? throw new ArgumentNullException(nameof(cluster));
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+        _defaults = defaults?.Value ?? new AstraDbRequestDefaults();
     }
 
     /// <summary>
@@ -71,8 +83,9 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
     public Task<WriteResult> WriteAsync(
         string keyspace,
         string table,
-        IReadOnlyDictionary<string, object?> fields)
-        => ExecuteWriteAsync(keyspace, table, fields);
+        IReadOnlyDictionary<string, object?> fields,
+        ExecOptions? options = null)
+        => ExecuteWriteAsync(keyspace, table, fields, options);
 
     /// <summary>
     /// Executes a plain INSERT (upsert semantics) for a POCO via a field-mapper delegate.
@@ -89,7 +102,8 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
         string keyspace,
         string table,
         T document,
-        Func<T, IReadOnlyDictionary<string, object?>> toFields)
+        Func<T, IReadOnlyDictionary<string, object?>> toFields,
+        ExecOptions? options = null)
     {
         if (document is null) throw new ArgumentNullException(nameof(document));
         if (toFields is null) throw new ArgumentNullException(nameof(toFields));
@@ -97,7 +111,7 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
         var fields = toFields(document)
             ?? throw new ArgumentException("toFields returned null.", nameof(toFields));
 
-        return ExecuteWriteAsync(keyspace, table, fields);
+        return ExecuteWriteAsync(keyspace, table, fields, options);
     }
 
     // ----------------- Core execution (shared) -----------------
@@ -113,12 +127,15 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
     private async Task<WriteResult> ExecuteWriteAsync(
         string keyspace,
         string table,
-        IReadOnlyDictionary<string, object?> fields)
+        IReadOnlyDictionary<string, object?> fields,
+        ExecOptions? options)
     {
         if (string.IsNullOrWhiteSpace(keyspace)) throw new ArgumentException("keyspace required", nameof(keyspace));
         if (string.IsNullOrWhiteSpace(table)) throw new ArgumentException("table required", nameof(table));
         if (fields is null || fields.Count == 0)
             throw new ArgumentException("At least one column/value is required.", nameof(fields));
+
+        var execOptions = ExecOptionsApplier.EffectiveWrite(options, _defaults);
 
         var ks = KeyspaceResolver.Resolve(_session, keyspace);
 
@@ -150,6 +167,7 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
         }
 
         var bs = ps.Bind(paramValues.ToArray());
+        ExecOptionsApplier.ApplyToStatement(bs, execOptions);
 
         // Sensible defaults (configured once here)
         bs.SetConsistencyLevel(ConsistencyLevel.LocalQuorum);
@@ -182,7 +200,10 @@ public sealed class AstraDbCqlClient : IAstraDbClient, IAsyncDisposable
         await _cluster.ShutdownAsync().ConfigureAwait(false);
     }
 
-    public async Task<IEnumerable<T>> ReadAsync<T>(IDictionary<string, object> filters = null, CancellationToken ct = default)
+    public async Task<IEnumerable<T>> ReadAsync<T>(
+        IDictionary<string, object> filters = null,
+         ExecOptions? options = null,
+         CancellationToken ct = default)
     {
         try
         {

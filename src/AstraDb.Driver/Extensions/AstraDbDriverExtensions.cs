@@ -2,6 +2,7 @@ using AstraDb.Driver.Abstractions;
 using AstraDb.Driver.Config;
 using AstraDb.Driver.Implementations;
 using AstraDb.Driver.Mapping;
+using AstraDb.Driver.Options;
 using Cassandra;
 using Cassandra.Mapping;
 using Microsoft.Extensions.Configuration;
@@ -30,6 +31,10 @@ public static class AstraDbDriverExtensions
 
         // Options
         services.AddSingleton(options);
+        var defaults = configSection.Get<AstraDbConnectionOptions>()
+            ?? throw new InvalidOperationException("AstraDB connection options section is missing or invalid.");
+
+        services.AddSingleton(defaults);
 
         // Cluster (singleton)
         services.AddSingleton<ICluster>(_ =>

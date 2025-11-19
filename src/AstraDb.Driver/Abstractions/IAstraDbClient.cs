@@ -11,6 +11,7 @@ public interface IAstraDbClient : IAsyncDisposable
 
     Task<IEnumerable<T>> ReadAsync<T>(
         IDictionary<string, object> filters = null!,
+        ExecOptions? options = null,
         CancellationToken ct = default);
 
     Task<WriteResult> WriteAsync<T>(
@@ -20,11 +21,13 @@ public interface IAstraDbClient : IAsyncDisposable
     Task<WriteResult> WriteAsync(
         string keyspace,
         string table,
-        IReadOnlyDictionary<string, object?> fields);
+        IReadOnlyDictionary<string, object?> fields,
+        ExecOptions? options = null);
 
     Task<WriteResult> WriteAsync<T>(
         string keyspace,
         string table,
         T document,
-        Func<T, IReadOnlyDictionary<string, object?>> toFields);
+        Func<T, IReadOnlyDictionary<string, object?>> toFields,
+        ExecOptions? options = null);
 }
